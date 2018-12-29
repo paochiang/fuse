@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"bazil.org/fuse"
+	"github.com/seaweedfs/fuse"
 )
 
 func TestOpenFlagsAccmodeMaskReadWrite(t *testing.T) {

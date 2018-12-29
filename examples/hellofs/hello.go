@@ -7,9 +7,9 @@ import (
 	"log"
 	"os"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
-	_ "bazil.org/fuse/fs/fstestutil"
+	"github.com/seaweedfs/fuse"
+	"github.com/seaweedfs/fuse/fs"
+	_ "github.com/seaweedfs/fuse/fs/fstestutil"
 	"golang.org/x/net/context"
 )
 

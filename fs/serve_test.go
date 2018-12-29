@@ -16,12 +16,12 @@ import (
 	"testing"
 	"time"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
-	"bazil.org/fuse/fs/fstestutil"
-	"bazil.org/fuse/fs/fstestutil/record"
-	"bazil.org/fuse/fuseutil"
-	"bazil.org/fuse/syscallx"
+	"github.com/seaweedfs/fuse"
+	"github.com/seaweedfs/fuse/fs"
+	"github.com/seaweedfs/fuse/fs/fstestutil"
+	"github.com/seaweedfs/fuse/fs/fstestutil/record"
+	"github.com/seaweedfs/fuse/fuseutil"
+	"github.com/seaweedfs/fuse/syscallx"
 	"golang.org/x/net/context"
 )
 
@@ -211,14 +211,8 @@ func TestStatfs(t *testing.T) {
 		if g, e := st.Ffree, uint64(11); g != e {
 			t.Errorf("got Ffree = %d; want %d", g, e)
 		}
-		if g, e := st.Bsize, int64(1000); g != e {
+		if g, e := st.Bsize, uint32(1000); g != e {
 			t.Errorf("got Bsize = %d; want %d", g, e)
-		}
-		if g, e := st.Namelen, int64(34); g != e {
-			t.Errorf("got Namelen = %d; want %d", g, e)
-		}
-		if g, e := st.Frsize, int64(7); g != e {
-			t.Errorf("got Frsize = %d; want %d", g, e)
 		}
 	}
 

@@ -1,6 +1,6 @@
 seqdiag {
   app;
-  fuse [label="bazil.org/fuse"];
+  fuse [label="github.com/seaweedfs/fuse"];
   wait [label="callMount\nhelper goroutine"];
   mount_osxfusefs;
   kernel;

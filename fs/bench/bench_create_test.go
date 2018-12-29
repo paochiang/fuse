@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"bazil.org/fuse"
-	"bazil.org/fuse/fs"
-	"bazil.org/fuse/fs/fstestutil"
+	"github.com/seaweedfs/fuse"
+	"github.com/seaweedfs/fuse/fs"
+	"github.com/seaweedfs/fuse/fs/fstestutil"
 	"golang.org/x/net/context"
 )
 

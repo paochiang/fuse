@@ -1,6 +1,6 @@
-# bazil.org/fuse documentation
+# github.com/seaweedfs/fuse documentation
 
-See also API docs at http://godoc.org/bazil.org/fuse
+See also API docs at http://godoc.org/github.com/seaweedfs/fuse
 
 - [The mount sequence](mount-sequence.md)
 - [Writing documentation](writing-docs.md)
