@@ -1,12 +1,12 @@
 package record // import "github.com/seaweedfs/fuse/fs/fstestutil/record"
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"
-	"golang.org/x/net/context"
 )
 
 // Writes gathers data from FUSE Write calls.

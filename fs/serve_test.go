@@ -2,6 +2,7 @@ package fs_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -22,7 +23,6 @@ import (
 	"github.com/seaweedfs/fuse/fs/fstestutil/record"
 	"github.com/seaweedfs/fuse/fuseutil"
 	"github.com/seaweedfs/fuse/syscallx"
-	"golang.org/x/net/context"
 )
 
 // TO TEST:

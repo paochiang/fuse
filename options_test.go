@@ -1,6 +1,7 @@
 package fuse_test
 
 import (
+	"context"
 	"os"
 	"runtime"
 	"syscall"
@@ -9,7 +10,6 @@ import (
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"
 	"github.com/seaweedfs/fuse/fs/fstestutil"
-	"golang.org/x/net/context"
 )
 
 func init() {

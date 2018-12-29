@@ -1,10 +1,9 @@
 package bench_test
 
 import (
+	"context"
 	"os"
 	"testing"
-
-	"golang.org/x/net/context"
 
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"

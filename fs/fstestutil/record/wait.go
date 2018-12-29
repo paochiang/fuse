@@ -1,12 +1,12 @@
 package record
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"
-	"golang.org/x/net/context"
 )
 
 type nothing struct{}

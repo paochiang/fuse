@@ -1,11 +1,11 @@
 package fstestutil
 
 import (
+	"context"
 	"os"
 
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"
-	"golang.org/x/net/context"
 )
 
 // SimpleFS is a trivial FS that just implements the Root method.

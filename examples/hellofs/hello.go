@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -10,7 +11,6 @@ import (
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"
 	_ "github.com/seaweedfs/fuse/fs/fstestutil"
-	"golang.org/x/net/context"
 )
 
 func usage() {

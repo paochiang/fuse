@@ -1,6 +1,7 @@
 package bench_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -8,7 +9,6 @@ import (
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fs"
 	"github.com/seaweedfs/fuse/fs/fstestutil"
-	"golang.org/x/net/context"
 )
 
 type dummyFile struct {
