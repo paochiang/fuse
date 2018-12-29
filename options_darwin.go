@@ -38,3 +38,8 @@ func exclCreate(conf *mountConfig) error {
 	conf.options["excl_create"] = ""
 	return nil
 }
+
+func noBrowse(conf *mountConfig) error {
+	conf.options["nobrowse"] = ""
+	return nil
+}
