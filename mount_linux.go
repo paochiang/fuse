@@ -83,6 +83,7 @@ func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (f
 
 	// if os.Getuid == 0, try mountdev. That could fail for all sorts of reasons,
 	// and if it does, just keep on this other path.
+	/*
 	if os.Getuid() == 0 {
 		f, err := mountdev(dir, conf)
 		if err == nil {
@@ -90,6 +91,7 @@ func mount(dir string, conf *mountConfig, ready chan<- struct{}, errp *error) (f
 		}
 		log.Printf("mount: mountdev failed with %v, trying fusermount", err)
 	}
+	*/
 
 	fds, err := syscall.Socketpair(syscall.AF_FILE, syscall.SOCK_STREAM, 0)
 	if err != nil {
