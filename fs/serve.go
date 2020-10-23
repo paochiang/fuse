@@ -9,6 +9,7 @@ import (
 	"hash/fnv"
 	"io"
 	"log"
+	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
@@ -409,6 +410,24 @@ func (s *Server) Serve(fs FS) error {
 	})
 	s.handle = append(s.handle, nil)
 
+	N := 128
+	jobs:= make([]chan fuse.Request, N)
+	for i:=0;i<N;i++{
+		jobs[i] = make(chan fuse.Request, N)
+	}
+	worker := func(i int) {
+		for req := range jobs[i] {
+			s.serve(req)
+		}
+	}
+	for i:=0;i<N;i++{
+		s.wg.Add(1)
+		go func(i int) {
+			defer s.wg.Done()
+			worker(i)
+		}(i)
+	}
+
 	for {
 		req, err := s.conn.ReadRequest()
 		if err != nil {
@@ -418,11 +437,11 @@ func (s *Server) Serve(fs FS) error {
 			return err
 		}
 
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			s.serve(req)
-		}()
+		jobs[rand.Intn(N)] <- req
+	}
+
+	for i:=0;i<N;i++{
+		close(jobs[i])
 	}
 	return nil
 }
