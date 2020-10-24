@@ -3,22 +3,18 @@
 package fs // import "github.com/seaweedfs/fuse/fs"
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"hash/fnv"
 	"io"
 	"log"
-	"math/rand"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
-)
-
-import (
-	"bytes"
 
 	"github.com/seaweedfs/fuse"
 	"github.com/seaweedfs/fuse/fuseutil"
@@ -428,6 +424,7 @@ func (s *Server) Serve(fs FS) error {
 		}(i)
 	}
 
+	var i int
 	for {
 		req, err := s.conn.ReadRequest()
 		if err != nil {
@@ -437,7 +434,11 @@ func (s *Server) Serve(fs FS) error {
 			return err
 		}
 
-		jobs[rand.Intn(N)] <- req
+		jobs[i] <- req
+		i++
+		if i >= N {
+			i = 0
+		}
 	}
 
 	for i:=0;i<N;i++{
