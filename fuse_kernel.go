@@ -39,14 +39,16 @@ import (
 	"fmt"
 	"syscall"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 // The FUSE version implemented by the package.
 const (
 	protoVersionMinMajor = 7
-	protoVersionMinMinor = 8
+	protoVersionMinMinor = 17
 	protoVersionMaxMajor = 7
-	protoVersionMaxMinor = 12
+	protoVersionMaxMinor = 17
 )
 
 const (
@@ -64,13 +66,6 @@ type kstatfs struct {
 	Frsize  uint32
 	_       uint32
 	Spare   [6]uint32
-}
-
-type fileLock struct {
-	Start uint64
-	End   uint64
-	Type  uint32
-	Pid   uint32
 }
 
 // GetattrFlags are bit flags that can be seen in GetattrRequest.
@@ -255,7 +250,7 @@ type InitFlags uint32
 
 const (
 	InitAsyncRead     InitFlags = 1 << 0
-	InitPosixLocks    InitFlags = 1 << 1
+	InitPOSIXLocks    InitFlags = 1 << 1
 	InitFileOps       InitFlags = 1 << 2
 	InitAtomicTrunc   InitFlags = 1 << 3
 	InitExportSupport InitFlags = 1 << 4
@@ -286,7 +281,7 @@ type flagName struct {
 
 var initFlagNames = []flagName{
 	{uint32(InitAsyncRead), "InitAsyncRead"},
-	{uint32(InitPosixLocks), "InitPosixLocks"},
+	{uint32(InitPOSIXLocks), "InitPOSIXLocks"},
 	{uint32(InitFileOps), "InitFileOps"},
 	{uint32(InitAtomicTrunc), "InitAtomicTrunc"},
 	{uint32(InitExportSupport), "InitExportSupport"},
@@ -336,7 +331,8 @@ func flagString(f uint32, names []flagName) string {
 type ReleaseFlags uint32
 
 const (
-	ReleaseFlush ReleaseFlags = 1 << 0
+	ReleaseFlush       ReleaseFlags = 1 << 0
+	ReleaseFlockUnlock ReleaseFlags = 1 << 1
 )
 
 func (fl ReleaseFlags) String() string {
@@ -345,6 +341,7 @@ func (fl ReleaseFlags) String() string {
 
 var releaseFlagNames = []flagName{
 	{uint32(ReleaseFlush), "ReleaseFlush"},
+	{uint32(ReleaseFlockUnlock), "ReleaseFlockUnlock"},
 }
 
 // Opcodes
@@ -668,21 +665,61 @@ type getxattrOut struct {
 	_    uint32
 }
 
+// The LockFlags are passed in LockRequest or LockWaitRequest.
+type LockFlags uint32
+
+const (
+	// BSD-style flock lock (not POSIX lock)
+	LockFlock LockFlags = 1 << 0
+)
+
+var lockFlagNames = []flagName{
+	{uint32(LockFlock), "LockFlock"},
+}
+
+func (fl LockFlags) String() string {
+	return flagString(uint32(fl), lockFlagNames)
+}
+
+type LockType uint32
+
+const (
+	// It seems FreeBSD FUSE passes these through using its local
+	// values, not whatever Linux enshrined into the protocol. It's
+	// unclear what the intended behavior is.
+
+	LockRead   LockType = unix.F_RDLCK
+	LockWrite  LockType = unix.F_WRLCK
+	LockUnlock LockType = unix.F_UNLCK
+)
+
+var lockTypeNames = map[LockType]string{
+	LockRead:   "LockRead",
+	LockWrite:  "LockWrite",
+	LockUnlock: "LockUnlock",
+}
+
+func (l LockType) String() string {
+	s, ok := lockTypeNames[l]
+	if ok {
+		return s
+	}
+	return fmt.Sprintf("LockType(%d)", l)
+}
+
+type fileLock struct {
+	Start uint64
+	End   uint64
+	Type  uint32
+	PID   uint32
+}
+
 type lkIn struct {
 	Fh      uint64
 	Owner   uint64
 	Lk      fileLock
 	LkFlags uint32
 	_       uint32
-}
-
-func lkInSize(p Protocol) uintptr {
-	switch {
-	case p.LT(Protocol{7, 9}):
-		return unsafe.Offsetof(lkIn{}.LkFlags)
-	default:
-		return unsafe.Sizeof(lkIn{})
-	}
 }
 
 type lkOut struct {

@@ -992,13 +992,6 @@ func (c *Conn) ReadRequest() (Request, error) {
 			Flags:        InitFlags(in.Flags),
 		}
 
-	case opGetlk:
-		panic("opGetlk")
-	case opSetlk:
-		panic("opSetlk")
-	case opSetlkw:
-		panic("opSetlkw")
-
 	case opAccess:
 		in := (*accessIn)(m.data())
 		if m.len() < unsafe.Sizeof(*in) {
@@ -1047,6 +1040,54 @@ func (c *Conn) ReadRequest() (Request, error) {
 	case opDestroy:
 		req = &DestroyRequest{
 			Header: m.Header(),
+		}
+
+	case opSetlk, opSetlkw:
+		in := (*lkIn)(m.data())
+		if m.len() < unsafe.Sizeof(*in) {
+			goto corrupt
+		}
+		tmp := &LockRequest{
+			Header:    m.Header(),
+			Handle:    HandleID(in.Fh),
+			LockOwner: LockOwner(in.Owner),
+			Lock: FileLock{
+				Start: in.Lk.Start,
+				End:   in.Lk.End,
+				Type:  LockType(in.Lk.Type),
+				PID:   int32(in.Lk.PID),
+			},
+			LockFlags: LockFlags(in.LkFlags),
+		}
+		switch {
+		case tmp.Lock.Type == LockUnlock:
+			req = (*UnlockRequest)(tmp)
+		case m.hdr.Opcode == opSetlkw:
+			req = (*LockWaitRequest)(tmp)
+		default:
+			req = tmp
+		}
+
+	case opGetlk:
+		in := (*lkIn)(m.data())
+		if m.len() < unsafe.Sizeof(*in) {
+			goto corrupt
+		}
+		req = &QueryLockRequest{
+			Header:    m.Header(),
+			Handle:    HandleID(in.Fh),
+			LockOwner: LockOwner(in.Owner),
+			Lock: FileLock{
+				Start: in.Lk.Start,
+				End:   in.Lk.End,
+				Type:  LockType(in.Lk.Type),
+				// fuse.h claims this field is a uint32, but then the
+				// spec talks about -1 as a value, and using int as
+				// the C definition is pretty common. Make our API use
+				// a signed integer.
+				PID: int32(in.Lk.PID),
+			},
+			LockFlags: LockFlags(in.LkFlags),
 		}
 
 	// OS X
@@ -1233,6 +1274,17 @@ func (c *Conn) InvalidateEntry(parent NodeID, name string) error {
 	return c.sendInvalidate(buf)
 }
 
+// LockOwner is a file-local opaque identifier assigned by the kernel
+// to identify the owner of a particular lock.
+type LockOwner uint64
+
+func (o LockOwner) String() string {
+	if o == 0 {
+		return "0"
+	}
+	return fmt.Sprintf("%016x", uint64(o))
+}
+
 // An InitRequest is the first request sent on a FUSE file system.
 type InitRequest struct {
 	Header `json:"-"`
@@ -1376,7 +1428,7 @@ func (a Attr) String() string {
 	return fmt.Sprintf("valid=%v ino=%v size=%d mode=%v", a.Valid, a.Inode, a.Size, a.Mode)
 }
 
-func unix(t time.Time) (sec uint64, nsec uint32) {
+func unixTime(t time.Time) (sec uint64, nsec uint32) {
 	nano := t.UnixNano()
 	sec = uint64(nano / 1e9)
 	nsec = uint32(nano % 1e9)
@@ -1387,10 +1439,10 @@ func (a *Attr) attr(out *attr, proto Protocol) {
 	out.Ino = a.Inode
 	out.Size = a.Size
 	out.Blocks = a.Blocks
-	out.Atime, out.AtimeNsec = unix(a.Atime)
-	out.Mtime, out.MtimeNsec = unix(a.Mtime)
-	out.Ctime, out.CtimeNsec = unix(a.Ctime)
-	out.SetCrtime(unix(a.Crtime))
+	out.Atime, out.AtimeNsec = unixTime(a.Atime)
+	out.Mtime, out.MtimeNsec = unixTime(a.Mtime)
+	out.Ctime, out.CtimeNsec = unixTime(a.Ctime)
+	out.SetCrtime(unixTime(a.Crtime))
 	out.Mode = uint32(a.Mode) & 0777
 	switch {
 	default:
@@ -2341,4 +2393,145 @@ func (r *ExchangeDataRequest) String() string {
 func (r *ExchangeDataRequest) Respond() {
 	buf := r.newBuffer(0)
 	r.respond(buf)
+}
+
+type FileLock struct {
+	Start uint64
+	End   uint64
+	Type  LockType
+	PID   int32
+}
+
+// LockRequest asks to try acquire a byte range lock on a node. The
+// response should be immediate, do not wait to obtain lock.
+//
+// Unlocking can be
+//
+//     - explicit with UnlockRequest
+//     - for flock: implicit on final close (ReleaseRequest.ReleaseFlags
+//       has ReleaseFlockUnlock set)
+//     - for POSIX locks: implicit on any close (FlushRequest)
+//     - for Open File Description locks: implicit on final close
+//       (no LockOwner observed as of 2020-04)
+//
+// See LockFlags to know which kind of a lock is being requested. (As
+// of 2020-04, Open File Descriptor locks are indistinguishable from
+// POSIX. This means programs using those locks will likely misbehave
+// when closing FDs on FUSE-based distributed filesystems, as the
+// filesystem has no better knowledge than to follow POSIX locking
+// rules and release the global lock too early.)
+//
+// Most of the other differences between flock (BSD) and POSIX (fcntl
+// F_SETLK) locks are relevant only to the caller, not the filesystem.
+// FUSE always sees ranges, and treats flock whole-file locks as
+// requests for the maximum byte range. Filesystems should do the
+// same, as this provides a forwards compatibility path to
+// Linux-native Open file description locks.
+//
+// To enable locking events in FUSE, pass LockingFlock() and/or
+// LockingPOSIX() to Mount.
+//
+// See also LockWaitRequest.
+type LockRequest struct {
+	Header
+	Handle HandleID
+	// LockOwner is a unique identifier for the originating client, to
+	// identify locks.
+	LockOwner LockOwner
+	Lock      FileLock
+	LockFlags LockFlags
+}
+
+var _ = Request(&LockRequest{})
+
+func (r *LockRequest) String() string {
+	return fmt.Sprintf("Lock [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
+}
+
+func (r *LockRequest) Respond() {
+	buf := newBuffer(0)
+	r.respond(buf)
+}
+
+// LockWaitRequest asks to acquire a byte range lock on a node,
+// delaying response until lock can be obtained (or the request is
+// interrupted).
+//
+// See LockRequest. LockWaitRequest can be converted to a LockRequest.
+type LockWaitRequest LockRequest
+
+var _ LockRequest = (LockRequest)(LockWaitRequest{})
+
+var _ = Request(&LockWaitRequest{})
+
+func (r *LockWaitRequest) String() string {
+	return fmt.Sprintf("LockWait [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
+}
+
+func (r *LockWaitRequest) Respond() {
+	buf := newBuffer(0)
+	r.respond(buf)
+}
+
+// UnlockRequest asks to release a lock on a byte range on a node.
+//
+// UnlockRequests always have Lock.Type == LockUnlock.
+//
+// See LockRequest. UnlockRequest can be converted to a LockRequest.
+type UnlockRequest LockRequest
+
+var _ LockRequest = (LockRequest)(UnlockRequest{})
+
+var _ = Request(&UnlockRequest{})
+
+func (r *UnlockRequest) String() string {
+	return fmt.Sprintf("Unlock [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
+}
+
+func (r *UnlockRequest) Respond() {
+	buf := newBuffer(0)
+	r.respond(buf)
+}
+
+// QueryLockRequest queries the lock status.
+//
+// If the lock could be placed, set response Lock.Type to
+// unix.F_UNLCK.
+//
+// If there are conflicting locks, the response should describe one of
+// them. For Open File Description locks, set PID to -1. (This is
+// probably also the sane behavior for locks held by remote parties.)
+type QueryLockRequest struct {
+	Header
+	Handle    HandleID
+	LockOwner LockOwner
+	Lock      FileLock
+	LockFlags LockFlags
+}
+
+var _ = Request(&QueryLockRequest{})
+
+func (r *QueryLockRequest) String() string {
+	return fmt.Sprintf("QueryLock [%s] %v owner=%v range=%d..%d type=%v pid=%v fl=%v", &r.Header, r.Handle, r.LockOwner, r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID, r.LockFlags)
+}
+
+// Respond replies to the request with the given response.
+func (r *QueryLockRequest) Respond(resp *QueryLockResponse) {
+	buf := newBuffer(unsafe.Sizeof(lkOut{}))
+	out := (*lkOut)(buf.alloc(unsafe.Sizeof(lkOut{})))
+	out.Lk = fileLock{
+		Start: resp.Lock.Start,
+		End:   resp.Lock.End,
+		Type:  uint32(resp.Lock.Type),
+		PID:   uint32(resp.Lock.PID),
+	}
+	r.respond(buf)
+}
+
+type QueryLockResponse struct {
+	Lock FileLock
+}
+
+func (r *QueryLockResponse) String() string {
+	return fmt.Sprintf("QueryLock range=%d..%d type=%v pid=%v", r.Lock.Start, r.Lock.End, r.Lock.Type, r.Lock.PID)
 }
