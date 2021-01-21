@@ -2,4 +2,4 @@ module github.com/seaweedfs/fuse
 
 go 1.15
 
-require golang.org/x/sys v0.0.0-20201022201747-fb209a7c41cd
+require golang.org/x/sys v0.0.0-20200420163511-1957bb5e6d1f
