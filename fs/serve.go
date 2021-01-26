@@ -1599,15 +1599,6 @@ func (s *Server) invalidateNode(node Node, off int64, size int64) error {
 	// consider a /dev/fuse write to be instantaneous enough to not
 	// need separate before and after messages.
 	err := s.conn.InvalidateNode(id, off, size)
-	s.debug(notification{
-		Op:   "InvalidateNode",
-		Node: id,
-		Out: invalidateNodeDetail{
-			Off:  off,
-			Size: size,
-		},
-		Err: errstr(err),
-	})
 	return err
 }
 
@@ -1671,14 +1662,6 @@ func (s *Server) InvalidateEntry(parent Node, name string) error {
 		return fuse.ErrNotCached
 	}
 	err := s.conn.InvalidateEntry(id, name)
-	s.debug(notification{
-		Op:   "InvalidateEntry",
-		Node: id,
-		Out: invalidateEntryDetail{
-			Name: name,
-		},
-		Err: errstr(err),
-	})
 	return err
 }
 
