@@ -153,7 +153,7 @@ func ExclCreate() MountOption {
 // DaemonTimeout sets the time in seconds between a request and a reply before
 // the FUSE mount is declared dead.
 //
-// OS X and FreeBSD only. Others ignore this option.
+// OS X only. Others ignore this option.
 func DaemonTimeout(name string) MountOption {
 	return daemonTimeout(name)
 }
