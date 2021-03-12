@@ -384,6 +384,7 @@ const (
 	opDestroy     = 38
 	opIoctl       = 39 // Linux?
 	opPoll        = 40 // Linux?
+	opBatchForget = 42
 
 	// OS X
 	opSetvolname = 61
@@ -412,6 +413,16 @@ func entryOutSize(p Protocol) uintptr {
 
 type forgetIn struct {
 	Nlookup uint64
+}
+
+type forgetOne struct {
+	NodeID  uint64
+	Nlookup uint64
+}
+
+type batchForgetIn struct {
+	Count uint32
+	_     uint32
 }
 
 type getattrIn struct {
