@@ -1263,15 +1263,11 @@ func (c *Server) handleRequest(ctx context.Context, node Node, snode *serveNode,
 
 	case *fuse.ForgetRequest:
 		_, forget := c.dropNode(r.Hdr().Node, r.N)
-		snode := c.node[r.Hdr().Node]
-		if snode!=nil{
-			println("forget", snode.refs)
-		}
 		if forget {
-		}
-		n, ok := node.(NodeForgetter)
-		if ok {
-			n.Forget()
+			n, ok := node.(NodeForgetter)
+			if ok {
+				n.Forget()
+			}
 		}
 		done(nil)
 		r.Respond()
