@@ -382,8 +382,9 @@ const (
 	opInterrupt   = 36
 	opBmap        = 37
 	opDestroy     = 38
-	opIoctl       = 39 // Linux?
-	opPoll        = 40 // Linux?
+	opIoctl       = 39
+	opPoll        = 40
+	opNotifyReply = 41
 	opBatchForget = 42
 
 	// OS X
@@ -554,7 +555,7 @@ type releaseIn struct {
 	Fh           uint64
 	Flags        uint32
 	ReleaseFlags uint32
-	LockOwner    uint32
+	LockOwner    uint64
 }
 
 type flushIn struct {
@@ -808,6 +809,8 @@ const (
 	notifyCodePoll       int32 = 1
 	notifyCodeInvalInode int32 = 2
 	notifyCodeInvalEntry int32 = 3
+	notifyCodeStore      int32 = 4
+	notifyCodeRetrieve   int32 = 5
 )
 
 type notifyInvalInodeOut struct {
@@ -820,4 +823,102 @@ type notifyInvalEntryOut struct {
 	Parent  uint64
 	Namelen uint32
 	_       uint32
+}
+
+type notifyStoreOut struct {
+	Nodeid uint64
+	Offset uint64
+	Size   uint32
+	_      uint32
+}
+
+type notifyRetrieveOut struct {
+	NotifyUnique uint64
+	Nodeid       uint64
+	Offset       uint64
+	Size         uint32
+	_            uint32
+}
+
+type notifyRetrieveIn struct {
+	// matches writeIn
+
+	_      uint64
+	Offset uint64
+	Size   uint32
+	_      uint32
+	_      uint64
+	_      uint64
+}
+
+// PollFlags are passed in PollRequest.Flags
+type PollFlags uint32
+
+const (
+	// PollScheduleNotify requests that a poll notification is done
+	// once the node is ready.
+	PollScheduleNotify PollFlags = 1 << 0
+)
+
+var pollFlagNames = []flagName{
+	{uint32(PollScheduleNotify), "PollScheduleNotify"},
+}
+
+func (fl PollFlags) String() string {
+	return flagString(uint32(fl), pollFlagNames)
+}
+
+type PollEvents uint32
+
+const (
+	PollIn       PollEvents = 0x0000_0001
+	PollPriority PollEvents = 0x0000_0002
+	PollOut      PollEvents = 0x0000_0004
+	PollError    PollEvents = 0x0000_0008
+	PollHangup   PollEvents = 0x0000_0010
+	// PollInvalid doesn't seem to be used in the FUSE protocol.
+	PollInvalid        PollEvents = 0x0000_0020
+	PollReadNormal     PollEvents = 0x0000_0040
+	PollReadOutOfBand  PollEvents = 0x0000_0080
+	PollWriteNormal    PollEvents = 0x0000_0100
+	PollWriteOutOfBand PollEvents = 0x0000_0200
+	PollMessage        PollEvents = 0x0000_0400
+	PollReadHangup     PollEvents = 0x0000_2000
+
+	DefaultPollMask = PollIn | PollOut | PollReadNormal | PollWriteNormal
+)
+
+var pollEventNames = []flagName{
+	{uint32(PollIn), "PollIn"},
+	{uint32(PollPriority), "PollPriority"},
+	{uint32(PollOut), "PollOut"},
+	{uint32(PollError), "PollError"},
+	{uint32(PollHangup), "PollHangup"},
+	{uint32(PollInvalid), "PollInvalid"},
+	{uint32(PollReadNormal), "PollReadNormal"},
+	{uint32(PollReadOutOfBand), "PollReadOutOfBand"},
+	{uint32(PollWriteNormal), "PollWriteNormal"},
+	{uint32(PollWriteOutOfBand), "PollWriteOutOfBand"},
+	{uint32(PollMessage), "PollMessage"},
+	{uint32(PollReadHangup), "PollReadHangup"},
+}
+
+func (fl PollEvents) String() string {
+	return flagString(uint32(fl), pollEventNames)
+}
+
+type pollIn struct {
+	Fh     uint64
+	Kh     uint64
+	Flags  uint32
+	Events uint32
+}
+
+type pollOut struct {
+	REvents uint32
+	_       uint32
+}
+
+type notifyPollWakeupOut struct {
+	Kh uint64
 }
