@@ -100,6 +100,11 @@ type Node interface {
 	Attr(ctx context.Context, attr *fuse.Attr) error
 }
 
+type NodeIdentifier interface {
+	// Id returns the node inode value
+	Id() uint64
+}
+
 type NodeGetattrer interface {
 	// Getattr obtains the standard metadata for the receiver.
 	// It should store that metadata in resp.
@@ -427,6 +432,7 @@ func New(conn *fuse.Conn, config *Config) *Server {
 		conn:         conn,
 		req:          map[fuse.RequestID]func(){},
 		nodeRef:      map[Node]fuse.NodeID{},
+		inode2id:     map[uint64]fuse.NodeID{},
 		notifyWait:   map[fuse.RequestID]chan<- *fuse.NotifyReply{},
 		dynamicInode: GenerateDynamicInode,
 	}
@@ -455,6 +461,7 @@ type Server struct {
 	req        map[fuse.RequestID]func() // map request to cancel functions
 	node       []*serveNode
 	nodeRef    map[Node]fuse.NodeID
+	inode2id   map[uint64]fuse.NodeID
 	handle     []*serveHandle
 	freeNode   []fuse.NodeID
 	freeHandle []fuse.HandleID
@@ -486,7 +493,7 @@ func (s *Server) Serve(fs FS) error {
 	}
 	// Recognize the root node if it's ever returned from Lookup,
 	// passed to Invalidate, etc.
-	s.nodeRef[root] = 1
+	s.setNodeId(root, 1)
 	s.node = append(s.node, nil, &serveNode{
 		inode:      1,
 		generation: s.nodeGen,
@@ -579,7 +586,7 @@ func (c *Server) saveNode(inode uint64, node Node) (id fuse.NodeID, gen uint64) 
 	c.meta.Lock()
 	defer c.meta.Unlock()
 
-	if id, ok := c.nodeRef[node]; ok {
+	if id, ok := c.getNodeId(node); ok {
 		sn := c.node[id]
 		sn.refs++
 		return id, sn.generation
@@ -596,7 +603,7 @@ func (c *Server) saveNode(inode uint64, node Node) (id fuse.NodeID, gen uint64) 
 		c.node = append(c.node, sn)
 	}
 	sn.generation = c.nodeGen
-	c.nodeRef[node] = id
+	c.setNodeId(node, id)
 	return id, sn.generation
 }
 
@@ -653,7 +660,7 @@ func (c *Server) dropNode(id fuse.NodeID, n uint64) (node Node, forget bool) {
 	if snode.refs == 0 {
 		snode.wg.Wait()
 		c.node[id] = nil
-		delete(c.nodeRef, snode.node)
+		c.delNodeId(snode.node)
 		c.freeNode = append(c.freeNode, id)
 		return snode.node, true
 	}
@@ -1726,9 +1733,32 @@ func errstr(err error) string {
 	return err.Error()
 }
 
+func (s *Server) getNodeId(node Node) (id fuse.NodeID, ok bool) {
+	if nodeIdentfier, isIdentifier := node.(NodeIdentifier); isIdentifier {
+		id, ok = s.inode2id[nodeIdentfier.Id()]
+		return
+	}
+	id, ok = s.nodeRef[node]
+	return
+}
+func (s *Server) setNodeId(node Node, id fuse.NodeID) {
+	if nodeIdentfier, ok := node.(NodeIdentifier); ok {
+		s.inode2id[nodeIdentfier.Id()] = id
+		return
+	}
+	s.nodeRef[node] = id
+}
+func (s *Server) delNodeId(node Node) {
+	if nodeIdentfier, ok := node.(NodeIdentifier); ok {
+		delete(s.inode2id, nodeIdentfier.Id())
+		return
+	}
+	delete(s.nodeRef, node)
+}
+
 func (s *Server) invalidateNode(node Node, off int64, size int64) error {
 	s.meta.Lock()
-	id, ok := s.nodeRef[node]
+	id, ok := s.getNodeId(node)
 	if ok {
 		snode := s.node[id]
 		snode.wg.Add(1)
@@ -1803,7 +1833,7 @@ func (i invalidateEntryDetail) String() string {
 // node.
 func (s *Server) InvalidateEntry(parent Node, name string) error {
 	s.meta.Lock()
-	id, ok := s.nodeRef[parent]
+	id, ok := s.getNodeId(parent)
 	if ok {
 		snode := s.node[id]
 		snode.wg.Add(1)
@@ -1850,7 +1880,7 @@ func (i notifyRetrieveReplyDetail) String() string {
 // the node.
 func (s *Server) NotifyStore(node Node, offset uint64, data []byte) error {
 	s.meta.Lock()
-	id, ok := s.nodeRef[node]
+	id, ok := s.getNodeId(node)
 	if ok {
 		snode := s.node[id]
 		snode.wg.Add(1)
@@ -1884,7 +1914,7 @@ func (s *Server) NotifyStore(node Node, offset uint64, data []byte) error {
 // the node.
 func (s *Server) NotifyRetrieve(node Node, offset uint64, size uint32) ([]byte, error) {
 	s.meta.Lock()
-	id, ok := s.nodeRef[node]
+	id, ok := s.getNodeId(node)
 	if ok {
 		snode := s.node[id]
 		snode.wg.Add(1)
