@@ -1756,6 +1756,18 @@ func (s *Server) delNodeId(node Node) {
 	delete(s.nodeRef, node)
 }
 
+func (s *Server) InvalidateInternalNode(oldNode Node, newNode Node, callbackFn func(internalNode Node)) {
+	s.meta.Lock()
+	id, ok := s.getNodeId(oldNode)
+	if ok {
+		snode := s.node[id]
+		callbackFn(snode.node)
+		s.setNodeId(newNode, id)
+		s.delNodeId(oldNode)
+	}
+	s.meta.Unlock()
+}
+
 func (s *Server) invalidateNode(node Node, off int64, size int64) error {
 	s.meta.Lock()
 	id, ok := s.getNodeId(node)
