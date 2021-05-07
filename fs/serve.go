@@ -1848,6 +1848,10 @@ func (s *Server) InvalidateEntry(parent Node, name string) error {
 	id, ok := s.getNodeId(parent)
 	if ok {
 		snode := s.node[id]
+		if snode == nil {
+			s.meta.Unlock()
+			return fuse.ErrNotCached
+		}
 		snode.wg.Add(1)
 		defer snode.wg.Done()
 	}
