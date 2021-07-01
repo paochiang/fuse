@@ -457,15 +457,16 @@ type Server struct {
 	dynamicInode func(parent uint64, name string) uint64
 
 	// state, protected by meta
-	meta       sync.Mutex
-	req        map[fuse.RequestID]func() // map request to cancel functions
-	node       []*serveNode
-	nodeRef    map[Node]fuse.NodeID
-	inode2id   map[uint64]fuse.NodeID
-	handle     []*serveHandle
-	freeNode   []fuse.NodeID
-	freeHandle []fuse.HandleID
-	nodeGen    uint64
+	meta         sync.Mutex
+	req          map[fuse.RequestID]func() // map request to cancel functions
+	node         []*serveNode
+	nodeRef      map[Node]fuse.NodeID
+	inode2idLock sync.Mutex
+	inode2id     map[uint64]fuse.NodeID
+	handle       []*serveHandle
+	freeNode     []fuse.NodeID
+	freeHandle   []fuse.HandleID
+	nodeGen      uint64
 
 	// pending notify upcalls to kernel
 	notifyMu   sync.Mutex
@@ -503,8 +504,8 @@ func (s *Server) Serve(fs FS) error {
 	s.handle = append(s.handle, nil)
 
 	N := 128
-	jobs:= make([]chan fuse.Request, N)
-	for i:=0;i<N;i++{
+	jobs := make([]chan fuse.Request, N)
+	for i := 0; i < N; i++ {
 		jobs[i] = make(chan fuse.Request, N)
 	}
 	worker := func(i int) {
@@ -512,7 +513,7 @@ func (s *Server) Serve(fs FS) error {
 			s.serve(req)
 		}
 	}
-	for i:=0;i<N;i++{
+	for i := 0; i < N; i++ {
 		s.wg.Add(1)
 		go func(i int) {
 			defer s.wg.Done()
@@ -537,7 +538,7 @@ func (s *Server) Serve(fs FS) error {
 		}
 	}
 
-	for i:=0;i<N;i++{
+	for i := 0; i < N; i++ {
 		close(jobs[i])
 	}
 	return nil
@@ -1735,7 +1736,9 @@ func errstr(err error) string {
 
 func (s *Server) getNodeId(node Node) (id fuse.NodeID, ok bool) {
 	if nodeIdentfier, isIdentifier := node.(NodeIdentifier); isIdentifier {
+		s.inode2idLock.Lock()
 		id, ok = s.inode2id[nodeIdentfier.Id()]
+		s.inode2idLock.Unlock()
 		return
 	}
 	id, ok = s.nodeRef[node]
@@ -1743,44 +1746,58 @@ func (s *Server) getNodeId(node Node) (id fuse.NodeID, ok bool) {
 }
 func (s *Server) setNodeId(node Node, id fuse.NodeID) {
 	if nodeIdentfier, ok := node.(NodeIdentifier); ok {
+		s.inode2idLock.Lock()
 		s.inode2id[nodeIdentfier.Id()] = id
+		s.inode2idLock.Unlock()
 		return
 	}
 	s.nodeRef[node] = id
 }
 func (s *Server) delNodeId(node Node) {
 	if nodeIdentfier, ok := node.(NodeIdentifier); ok {
+		s.inode2idLock.Lock()
 		delete(s.inode2id, nodeIdentfier.Id())
+		s.inode2idLock.Unlock()
 		return
 	}
 	delete(s.nodeRef, node)
 }
 
 func (s *Server) InvalidateInternalNode(oldNode Node, newNode Node, callbackFn func(internalNode Node)) {
-	s.meta.Lock()
 	id, ok := s.getNodeId(oldNode)
 	if ok {
+		s.meta.Lock()
 		snode := s.node[id]
+		s.meta.Unlock()
 		callbackFn(snode.node)
 		s.setNodeId(newNode, id)
 		s.delNodeId(oldNode)
 	}
-	s.meta.Unlock()
+}
+
+func (s *Server) FindInternalNode(nodeIdentifier Node) (internalNode Node, found bool) {
+	id, ok := s.getNodeId(nodeIdentifier)
+	if ok {
+		s.meta.Lock()
+		snode := s.node[id]
+		s.meta.Unlock()
+		return snode.node, true
+	}
+	return nil, false
 }
 
 func (s *Server) invalidateNode(node Node, off int64, size int64) error {
-	s.meta.Lock()
 	id, ok := s.getNodeId(node)
 	if ok {
+		s.meta.Lock()
 		snode := s.node[id]
+		s.meta.Unlock()
 		if snode == nil {
-			s.meta.Unlock()
 			return fuse.ErrNotCached
 		}
 		snode.wg.Add(1)
 		defer snode.wg.Done()
 	}
-	s.meta.Unlock()
 	if !ok {
 		// This is what the kernel would have said, if we had been
 		// able to send this message; it's not cached.
@@ -1848,18 +1865,17 @@ func (i invalidateEntryDetail) String() string {
 // Returns ErrNotCached if the kernel is not currently caching the
 // node.
 func (s *Server) InvalidateEntry(parent Node, name string) error {
-	s.meta.Lock()
 	id, ok := s.getNodeId(parent)
 	if ok {
+		s.meta.Lock()
 		snode := s.node[id]
+		s.meta.Unlock()
 		if snode == nil {
-			s.meta.Unlock()
 			return fuse.ErrNotCached
 		}
 		snode.wg.Add(1)
 		defer snode.wg.Done()
 	}
-	s.meta.Unlock()
 	if !ok {
 		// This is what the kernel would have said, if we had been
 		// able to send this message; it's not cached.
