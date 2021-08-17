@@ -506,7 +506,7 @@ func (s *Server) Serve(fs FS) error {
 	N := 128
 	jobs := make([]chan fuse.Request, N)
 	for i := 0; i < N; i++ {
-		jobs[i] = make(chan fuse.Request, N)
+		jobs[i] = make(chan fuse.Request)
 	}
 	worker := func(i int) {
 		for req := range jobs[i] {
@@ -521,7 +521,7 @@ func (s *Server) Serve(fs FS) error {
 		}(i)
 	}
 
-	var i int
+	job_cases := make([]reflect.SelectCase, N)
 	for {
 		req, err := s.conn.ReadRequest()
 		if err != nil {
@@ -531,11 +531,18 @@ func (s *Server) Serve(fs FS) error {
 			return err
 		}
 
-		jobs[i] <- req
-		i++
-		if i >= N {
-			i = 0
+		// Attempt to distribute the job to an idle worker
+		// If no such worker can be found, block until we can find one
+		// There is no point building up the job queue and reading in
+		// new requests when no worker is available to process them
+		for i, job := range jobs {
+			job_cases[i] = reflect.SelectCase {
+				Dir: reflect.SelectSend,
+				Chan: reflect.ValueOf(job),
+				Send: reflect.ValueOf(req),
+			}
 		}
+		reflect.Select(job_cases)
 	}
 
 	for i := 0; i < N; i++ {
