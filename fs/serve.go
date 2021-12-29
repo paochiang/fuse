@@ -503,12 +503,6 @@ func (s *Server) Serve(fs FS) error {
 	})
 	s.handle = append(s.handle, nil)
 
-	N := 128
-	jobQueue := make(chan struct{}, N)
-	for i := 0; i < N; i++ {
-		jobQueue <- struct{}{}
-	}
-
 	for {
 		req, err := s.conn.ReadRequest()
 		if err != nil {
@@ -518,14 +512,7 @@ func (s *Server) Serve(fs FS) error {
 			return err
 		}
 
-		<- jobQueue
-		go func() {
-			defer func() {
-				jobQueue <-struct {}{}
-			}()
-			s.serve(req)
-		}()
-
+		go s.serve(req)
 
 	}
 
