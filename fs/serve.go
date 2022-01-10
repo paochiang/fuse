@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -477,6 +478,8 @@ type Server struct {
 	wg sync.WaitGroup
 }
 
+var count uint64 = 0
+
 // Serve serves the FUSE connection by making calls to the methods
 // of fs and the Nodes and Handles it makes available.  It returns only
 // when the connection has been closed or an unexpected error occurs.
@@ -518,14 +521,19 @@ func (s *Server) Serve(fs FS) error {
 			return err
 		}
 
-		<- jobQueue
+		<-jobQueue
 		go func() {
 			defer func() {
-				jobQueue <-struct {}{}
+				jobQueue <- struct{}{}
 			}()
+			atomic.AddUint64(&count, 1)
+			countFinal := atomic.LoadUint64(&count)
+			if countFinal%100 == 0 {
+				fmt.Println(time.Now(), "s.server计数:", countFinal)
+			}
 			s.serve(req)
-		}()
 
+		}()
 
 	}
 
