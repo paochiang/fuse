@@ -1,4 +1,4 @@
-module github.com/seaweedfs/fuse
+module github.com/paochiang/fuse
 
 go 1.17
 
